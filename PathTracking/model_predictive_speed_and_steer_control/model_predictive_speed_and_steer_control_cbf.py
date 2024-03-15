@@ -618,6 +618,39 @@ def linear_programming(local_body_vertices, local_ob_vertices):
     return beta.value
 
 
+def transform_to_local(state, vertices_in_world):
+    """
+    Transform the obstacles' vertices from world coordinate to local body frame
+    state: robot state [x,y,yaw,v].
+    world_ob_vertices: the vertices in world frame.
+    """
+    if not isinstance(state, State):
+        raise TypeError(f"Expected an instance of Class type State, got {type(state)} instead.")
+    if not isinstance(vertices_in_world, np.ndarray):
+        raise TypeError(f"Expected an instance of Class type np.ndarray, got {type(vertices_in_world)} instead.")
+
+    x = state.x
+    y = state.y
+    yaw = state.yaw
+
+    T_b_in_w = np.array([
+        [math.cos(yaw), -math.sin(yaw), x],
+        [math.sin(yaw), math.cos(yaw), y],
+        [0, 0, 1]
+    ])
+    if np.linalg.det(T_b_in_w) != 0:
+        T_w_in_b = np.linalg.inv(T_b_in_w)
+    else:
+        raise ValueError("Matrix is not invertible")
+
+    vertices_in_world_aug = np.hstack((vertices_in_world,
+                                       np.ones((vertices_in_world.shape[0], 1))))
+    vertices_in_body_aug = T_w_in_b @ vertices_in_world_aug.T
+    vertices_in_body_aug = vertices_in_body_aug.T
+    vertices_in_body = vertices_in_body_aug[:, :-1]
+
+    return vertices_in_body
+
 
 def main():
     print(__file__ + " start!!")
