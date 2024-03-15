@@ -49,7 +49,7 @@ WHEEL_WIDTH = 0.2  # [m] # wheel width
 TREAD = 0.7  # [m]
 WB = 2.5  # [m] # wheel base
 
-BODY_VERTICE = np.array([
+BODY_VERTICES = np.array([
     [-BACKTOWHEEL, WIDTH / 2],
     [LENGTH - BACKTOWHEEL, WIDTH / 2],
     [LENGTH - BACKTOWHEEL, - WIDTH / 2],
@@ -270,10 +270,12 @@ def linear_mpc_control(xref, xbar, x0, dref):
 
     x = cvxpy.Variable((NX, T + 1))
     u = cvxpy.Variable((NU, T))
-    # beta = cvxpy.Variable((1, T+1))
-    # alpha = cvxpy.Variable((2, T+1))
-    # beta_0 = 1.2
-    # gamma = 0.9
+    beta_0 = get_max_scale_factor(BODY_VERTICES,
+                                  transform_to_local(State(x=x0[0], y=x0[1], yaw=x0[3], v=x0[2]), OB))
+    print(f'beta_0: {beta_0}')
+    beta = cvxpy.Variable((1, T))
+    alpha = cvxpy.Variable((2, T))
+    gamma = 0.9
 
 
     cost = 0.0
@@ -302,12 +304,19 @@ def linear_mpc_control(xref, xbar, x0, dref):
     constraints += [cvxpy.abs(u[0, :]) <= MAX_ACCEL]
     constraints += [cvxpy.abs(u[1, :]) <= MAX_STEER]
 
-    # 增加control barrier function 约束
-    # for t in range(T+1):
-    #     constraints += [beta[0,0] == beta_0] # 当前 beta 值
-    #     constraints += [beta[0, t+1] >= gamma ** (t+1) * beta_0]
-    #     # alpha[:,t+1] @ (p_b_i - p_s) -1 <=
-    #     # alpha[:,t+1] @ (p_o_i - p_s) - beta >= 0
+    # control barrier function 约束
+    # 有误，待修改，cbf约束应和状态牵扯起来；另外，应在世界坐标系下做LP求beta
+    # local_body_vertices = transform_to_local(State(x=x0[0], y=x0[1], yaw=x0[3], v=x0[2]),
+    #                                          BODY_VERTICES)
+    # local_ob_vertices = transform_to_local(State(x=x0[0], y=x0[1], yaw=x0[3], v=x0[2]),
+    #                                        OB)
+    # for t in range(T):
+    #     constraints += [(beta[0, t] - 1) >= gamma ** (t + 1) * (beta_0 - 1)]
+    #     for i in range(len(local_body_vertices)):
+    #         constraints += [alpha.T @ local_body_vertices[i] <= 1]
+    #     for i in range(len(local_ob_vertices)):
+    #         constraints += [alpha.T @ local_ob_vertices[i] >= beta[0, t]]
+
 
 
     prob = cvxpy.Problem(cvxpy.Minimize(cost), constraints)
@@ -573,6 +582,7 @@ def get_switch_back_course(dl):
 
     return cx, cy, cyaw, ck
 
+
 def set_convex_hull(ob):
     # 生成障碍物的convex hull
     if not isinstance(ob, np.ndarray):
@@ -589,7 +599,7 @@ def plot_con_hull_ob(convex_hull):
         plt.plot(convex_hull.points[simplex, 0], convex_hull.points[simplex, 1], 'k-')
 
 
-def linear_programming(local_body_vertices, local_ob_vertices):
+def get_max_scale_factor(local_body_vertices, local_ob_vertices):
     """
     用线性规划的方法求解最大缩放因子
     默认输入的坐标是在机器人机身坐标系的
@@ -609,7 +619,7 @@ def linear_programming(local_body_vertices, local_ob_vertices):
         constraints += [alpha.T @ local_body_vertices[i] <= 1]
     for i in range(len(local_ob_vertices)):
         constraints += [alpha.T @ local_ob_vertices[i] >= beta]
-
+    constraints += [beta >= 0.0]
     # 定义和求解问题
     prob = cvxpy.Problem(objective, constraints)
     prob.solve()
