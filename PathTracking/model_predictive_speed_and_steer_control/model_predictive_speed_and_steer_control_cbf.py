@@ -11,6 +11,8 @@ import math
 import numpy as np
 import sys
 import pathlib
+from scipy.spatial import ConvexHull
+import warnings
 from utils.angle import angle_mod
 sys.path.append(str(pathlib.Path(__file__).parent.parent.parent))
 
@@ -52,6 +54,13 @@ MAX_DSTEER = np.deg2rad(30.0)  # maximum steering speed [rad/s]
 MAX_SPEED = 55.0 / 3.6  # maximum speed [m/s]
 MIN_SPEED = -20.0 / 3.6  # minimum speed [m/s]
 MAX_ACCEL = 1.0  # maximum accel [m/ss]
+
+OB = np.array([[-32.0, 5.0],
+                [-25.0, 5.0],
+                [-35.0, 5.0],
+                [-28.0, 6.0],
+                [-26.0, 0.0],
+                [-30.0, 2.0]])  # obstacle positions
 
 show_animation = True
 
@@ -433,6 +442,7 @@ def do_simulation(cx, cy, cyaw, ck, sp, dl, initial_state):
             plt.plot(xref[0, :], xref[1, :], "xk", label="xref")
             plt.plot(cx[target_ind], cy[target_ind], "xg", label="target")
             plot_car(state.x, state.y, state.yaw, steer=di)
+            plot_con_hull_ob(set_convex_hull(OB))
             plt.axis("equal")
             plt.grid(True)
             plt.title("Time[s]:" + str(round(time, 2))
@@ -542,6 +552,24 @@ def get_switch_back_course(dl):
 
     return cx, cy, cyaw, ck
 
+def set_convex_hull(ob):
+    # 生成障碍物的convex hull
+    if not isinstance(ob, np.ndarray):
+        warnings.warn("obstacle is not a numpy array")
+        ob = np.array(ob)
+    return ConvexHull(ob)
+
+def plot_con_hull_ob(convex_hull):
+    # 画出障碍物点的convex hull
+    if not isinstance(convex_hull, ConvexHull):
+        raise TypeError("The input of plot_con_hull_ob is not a ConvexHull instance")
+    for simplex in convex_hull.simplices:
+        plt.plot(convex_hull.points[simplex, 0], convex_hull.points[simplex, 1], 'k-')
+
+
+
+
+
 
 def main():
     print(__file__ + " start!!")
@@ -614,5 +642,5 @@ def main2():
 
 
 if __name__ == '__main__':
-    main()
-    # main2()
+    # main()
+    main2()
