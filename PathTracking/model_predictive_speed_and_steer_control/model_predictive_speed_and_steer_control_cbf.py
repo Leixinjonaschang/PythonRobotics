@@ -41,13 +41,21 @@ N_IND_SEARCH = 10  # Search index number
 DT = 0.2  # [s] time tick
 
 # Vehicle parameters
-LENGTH = 4.5  # [m]
-WIDTH = 2.0  # [m]
-BACKTOWHEEL = 1.0  # [m]
-WHEEL_LEN = 0.3  # [m]
-WHEEL_WIDTH = 0.2  # [m]
+LENGTH = 4.5  # [m] # length of vehicle
+WIDTH = 2.0  # [m] # width of vehicle
+BACKTOWHEEL = 1.0  # [m] # distance from rear to wheel
+WHEEL_LEN = 0.3  # [m] # wheel length
+WHEEL_WIDTH = 0.2  # [m] # wheel width
 TREAD = 0.7  # [m]
-WB = 2.5  # [m]
+WB = 2.5  # [m] # wheel base
+
+BODY_VERTICE = np.array([
+    [-BACKTOWHEEL, WIDTH / 2],
+    [LENGTH - BACKTOWHEEL, WIDTH / 2],
+    [LENGTH - BACKTOWHEEL, - WIDTH / 2],
+    [-BACKTOWHEEL, - WIDTH / 2]
+])
+
 
 MAX_STEER = np.deg2rad(45.0)  # maximum steering angle [rad]
 MAX_DSTEER = np.deg2rad(30.0)  # maximum steering speed [rad/s]
@@ -262,6 +270,11 @@ def linear_mpc_control(xref, xbar, x0, dref):
 
     x = cvxpy.Variable((NX, T + 1))
     u = cvxpy.Variable((NU, T))
+    # beta = cvxpy.Variable((1, T+1))
+    # alpha = cvxpy.Variable((2, T+1))
+    # beta_0 = 1.2
+    # gamma = 0.9
+
 
     cost = 0.0
     constraints = []
@@ -288,6 +301,14 @@ def linear_mpc_control(xref, xbar, x0, dref):
     constraints += [x[2, :] >= MIN_SPEED]
     constraints += [cvxpy.abs(u[0, :]) <= MAX_ACCEL]
     constraints += [cvxpy.abs(u[1, :]) <= MAX_STEER]
+
+    # 增加control barrier function 约束
+    # for t in range(T+1):
+    #     constraints += [beta[0,0] == beta_0] # 当前 beta 值
+    #     constraints += [beta[0, t+1] >= gamma ** (t+1) * beta_0]
+    #     # alpha[:,t+1] @ (p_b_i - p_s) -1 <=
+    #     # alpha[:,t+1] @ (p_o_i - p_s) - beta >= 0
+
 
     prob = cvxpy.Problem(cvxpy.Minimize(cost), constraints)
     prob.solve(solver=cvxpy.ECOS, verbose=False)
@@ -566,8 +587,22 @@ def plot_con_hull_ob(convex_hull):
     for simplex in convex_hull.simplices:
         plt.plot(convex_hull.points[simplex, 0], convex_hull.points[simplex, 1], 'k-')
 
+def linear_programming(ob_convex_hull, state, vertice_body):
+    # 线性规划求解最大缩放因子
+    pass
 
-
+# def transform_to_local(convex_hull, x,y,yaw):
+#     if not isinstance(convex_hull, ConvexHull):
+#         raise TypeError("The first input of transform_to_local is not a ConvexHull instance")
+#     # 写出齐次变换矩阵
+#     T = np.array([[math.cos(yaw), -math.sin(yaw), x],
+#                   [math.sin(yaw), math.cos(yaw), y],
+#                   [0, 0, 1]])
+#     # 对convex_hull的点进行变换
+#     points = np.vstack((convex_hull.points.T, np.ones(convex_hull.points.shape[0])))
+#     points = T @ points
+#
+#     return points[:2].T
 
 
 
