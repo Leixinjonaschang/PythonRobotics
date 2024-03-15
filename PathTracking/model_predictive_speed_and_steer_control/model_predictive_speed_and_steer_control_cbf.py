@@ -580,6 +580,7 @@ def set_convex_hull(ob):
         ob = np.array(ob)
     return ConvexHull(ob)
 
+
 def plot_con_hull_ob(convex_hull):
     # 画出障碍物点的convex hull
     if not isinstance(convex_hull, ConvexHull):
@@ -587,22 +588,34 @@ def plot_con_hull_ob(convex_hull):
     for simplex in convex_hull.simplices:
         plt.plot(convex_hull.points[simplex, 0], convex_hull.points[simplex, 1], 'k-')
 
-def linear_programming(ob_convex_hull, state, vertice_body):
-    # 线性规划求解最大缩放因子
-    pass
 
-# def transform_to_local(convex_hull, x,y,yaw):
-#     if not isinstance(convex_hull, ConvexHull):
-#         raise TypeError("The first input of transform_to_local is not a ConvexHull instance")
-#     # 写出齐次变换矩阵
-#     T = np.array([[math.cos(yaw), -math.sin(yaw), x],
-#                   [math.sin(yaw), math.cos(yaw), y],
-#                   [0, 0, 1]])
-#     # 对convex_hull的点进行变换
-#     points = np.vstack((convex_hull.points.T, np.ones(convex_hull.points.shape[0])))
-#     points = T @ points
-#
-#     return points[:2].T
+def linear_programming(local_body_vertices, local_ob_vertices):
+    """
+    用线性规划的方法求解最大缩放因子
+    默认输入的坐标是在机器人机身坐标系的
+    默认 scale seed 为机身坐标系原点 (0,0)
+    """
+
+    # 创建优化变量
+    beta = cvxpy.Variable()
+    alpha = cvxpy.Variable((2, 1))  # 2x1
+
+    # 定义目标函数
+    objective = cvxpy.Maximize(beta)
+
+    # 定义约束条件
+    constraints = []
+    for i in range(len(local_body_vertices)):
+        constraints += [alpha.T @ local_body_vertices[i] <= 1]
+    for i in range(len(local_ob_vertices)):
+        constraints += [alpha.T @ local_ob_vertices[i] >= beta]
+
+    # 定义和求解问题
+    prob = cvxpy.Problem(objective, constraints)
+    prob.solve()
+
+    # 返回最大缩放因子
+    return beta.value
 
 
 
