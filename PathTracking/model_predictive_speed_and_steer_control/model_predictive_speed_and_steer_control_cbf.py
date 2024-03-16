@@ -20,7 +20,7 @@ from PathPlanning.CubicSpline import cubic_spline_planner
 
 NX = 4  # x = x, y, v, yaw
 NU = 2  # a = [accel, steer]
-T = 7  # horizon length
+T = 10  # horizon length
 
 # mpc parameters
 R = np.diag([0.01, 0.01])  # input cost matrix
@@ -32,13 +32,13 @@ STOP_SPEED = 0.5 / 3.6  # stop speed
 MAX_TIME = 500.0  # max simulation time
 
 # iterative paramter
-MAX_ITER = 3  # Max iteration
+MAX_ITER = 8  # Max iteration
 DU_TH = 0.1  # iteration finish param
 
 TARGET_SPEED = 10.0 / 3.6  # [m/s] target speed
 N_IND_SEARCH = 10  # Search index number
 
-DT = 0.2  # [s] time tick
+DT = 0.1  # [s] time tick
 
 # Vehicle parameters
 LENGTH = 4.5  # [m] # length of vehicle
@@ -49,7 +49,7 @@ WHEEL_WIDTH = 0.2  # [m] # wheel width
 TREAD = 0.7  # [m]
 WB = 2.5  # [m] # wheel base
 
-BODY_VERTICES = np.array([
+BODY_VERTICES_IN_BODY = np.array([
     [-BACKTOWHEEL, WIDTH / 2],
     [LENGTH - BACKTOWHEEL, WIDTH / 2],
     [LENGTH - BACKTOWHEEL, - WIDTH / 2],
@@ -247,6 +247,8 @@ def iterative_linear_mpc_control(xref, x0, dref, oa, od):
 
     for i in range(MAX_ITER):
         xbar = predict_motion(x0, oa, od, xref)
+        for t in range(T):
+            plot_car(xbar[0, t], xbar[1, t], xbar[3, t], steer=od[t])
         poa, pod = oa[:], od[:]
         oa, od, ox, oy, oyaw, ov = linear_mpc_control(xref, xbar, x0, dref)
         du = sum(abs(oa - poa)) + sum(abs(od - pod))  # calc u change value
@@ -270,13 +272,12 @@ def linear_mpc_control(xref, xbar, x0, dref):
 
     x = cvxpy.Variable((NX, T + 1))
     u = cvxpy.Variable((NU, T))
-    beta_0 = get_max_scale_factor(BODY_VERTICES,
+    beta_0 = get_max_scale_factor(BODY_VERTICES_IN_BODY,
                                   transform_to_local(State(x=x0[0], y=x0[1], yaw=x0[3], v=x0[2]), OB))
     print(f'beta_0: {beta_0}')
     beta = cvxpy.Variable((1, T))
     alpha = cvxpy.Variable((2, T))
-    gamma = 0.9
-
+    gamma = 0.5
 
     cost = 0.0
     constraints = []
@@ -305,22 +306,31 @@ def linear_mpc_control(xref, xbar, x0, dref):
     constraints += [cvxpy.abs(u[1, :]) <= MAX_STEER]
 
     # control barrier function 约束
-    # 有误，待修改，cbf约束应和状态牵扯起来；另外，应在世界坐标系下做LP求beta
-    # local_body_vertices = transform_to_local(State(x=x0[0], y=x0[1], yaw=x0[3], v=x0[2]),
-    #                                          BODY_VERTICES)
-    # local_ob_vertices = transform_to_local(State(x=x0[0], y=x0[1], yaw=x0[3], v=x0[2]),
-    #                                        OB)
+    # ob_convex_hull = set_convex_hull(OB)
+    # ob_vertices_in_world = OB[ob_convex_hull.vertices]
+    #
     # for t in range(T):
-    #     constraints += [(beta[0, t] - 1) >= gamma ** (t + 1) * (beta_0 - 1)]
-    #     for i in range(len(local_body_vertices)):
-    #         constraints += [alpha.T @ local_body_vertices[i] <= 1]
-    #     for i in range(len(local_ob_vertices)):
-    #         constraints += [alpha.T @ local_ob_vertices[i] >= beta[0, t]]
-
-
+    #     # constraints += [(beta[0, t] - 1) >= gamma ** (t + 1) * (beta_0 - 1)]
+    #     constraints += [(beta[0, t] - 1) >= 0]
+    #     # w_Rot_b is ^wR_b
+    #     w_Rot_b = np.array([
+    #         [math.cos(xbar[2, t]), -math.sin(xbar[2, t])],
+    #         [math.sin(xbar[2, t]), math.cos(xbar[2, t])]
+    #     ])
+    #     # w_Tran_b is ^wT_b
+    #     w_Tran_b = np.array([
+    #         [xbar[0, t]],
+    #         [xbar[1, t]]
+    #     ])
+    #     for i in range(len(BODY_VERTICES_IN_BODY)):
+    #         constraints += [alpha[:, t] @ (
+    #                 (w_Rot_b @ BODY_VERTICES_IN_BODY[i]).T + w_Tran_b) - xbar[0:2, t] <= 1]
+    #     for i in range(len(ob_vertices_in_world)):
+    #         constraints += [alpha[:, t] @ (ob_vertices_in_world[i].T - xbar[0:2, t]) >= beta[0, t]]
 
     prob = cvxpy.Problem(cvxpy.Minimize(cost), constraints)
     prob.solve(solver=cvxpy.ECOS, verbose=False)
+    print(prob.status)
 
     if prob.status == cvxpy.OPTIMAL or prob.status == cvxpy.OPTIMAL_INACCURATE:
         ox = get_nparray_from_matrix(x.value[0, :])
@@ -461,7 +471,7 @@ def do_simulation(cx, cy, cyaw, ck, sp, dl, initial_state):
             break
 
         if show_animation:  # pragma: no cover
-            plt.cla()
+            # plt.cla()
             # for stopping simulation with the esc key.
             plt.gcf().canvas.mpl_connect('key_release_event',
                     lambda event: [exit(0) if event.key == 'escape' else None])
@@ -478,6 +488,7 @@ def do_simulation(cx, cy, cyaw, ck, sp, dl, initial_state):
             plt.title("Time[s]:" + str(round(time, 2))
                       + ", speed[km/h]:" + str(round(state.v * 3.6, 2)))
             plt.pause(0.0001)
+            plt.cla()
 
     return t, x, y, yaw, v, d, a
 

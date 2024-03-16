@@ -230,6 +230,8 @@ def iterative_linear_mpc_control(xref, x0, dref, oa, od):
 
     for i in range(MAX_ITER):
         xbar = predict_motion(x0, oa, od, xref)
+        for t in range(T):
+            plot_car(xbar[0, t], xbar[1, t], xbar[3, t], steer=od[t])
         poa, pod = oa[:], od[:]
         oa, od, ox, oy, oyaw, ov = linear_mpc_control(xref, xbar, x0, dref)
         du = sum(abs(oa - poa)) + sum(abs(od - pod))  # calc u change value
@@ -422,7 +424,7 @@ def do_simulation(cx, cy, cyaw, ck, sp, dl, initial_state):
             break
 
         if show_animation:  # pragma: no cover
-            plt.cla()
+            # plt.cla()
             # for stopping simulation with the esc key.
             plt.gcf().canvas.mpl_connect('key_release_event',
                     lambda event: [exit(0) if event.key == 'escape' else None])
@@ -438,6 +440,7 @@ def do_simulation(cx, cy, cyaw, ck, sp, dl, initial_state):
             plt.title("Time[s]:" + str(round(time, 2))
                       + ", speed[km/h]:" + str(round(state.v * 3.6, 2)))
             plt.pause(0.0001)
+            plt.cla()
 
     return t, x, y, yaw, v, d, a
 
