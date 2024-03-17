@@ -20,7 +20,7 @@ from PathPlanning.CubicSpline import cubic_spline_planner
 
 NX = 4  # x = x, y, v, yaw
 NU = 2  # a = [accel, steer]
-T = 10  # horizon length
+T = 5  # horizon length
 
 # mpc parameters
 R = np.diag([0.01, 0.01])  # input cost matrix
@@ -32,13 +32,13 @@ STOP_SPEED = 0.5 / 3.6  # stop speed
 MAX_TIME = 500.0  # max simulation time
 
 # iterative paramter
-MAX_ITER = 8  # Max iteration
+MAX_ITER = 2  # Max iteration
 DU_TH = 0.1  # iteration finish param
 
 TARGET_SPEED = 10.0 / 3.6  # [m/s] target speed
 N_IND_SEARCH = 10  # Search index number
 
-DT = 0.1  # [s] time tick
+DT = 0.2  # [s] time tick
 
 # Vehicle parameters
 LENGTH = 4.5  # [m] # length of vehicle
@@ -306,27 +306,26 @@ def linear_mpc_control(xref, xbar, x0, dref):
     constraints += [cvxpy.abs(u[1, :]) <= MAX_STEER]
 
     # control barrier function 约束
-    # ob_convex_hull = set_convex_hull(OB)
-    # ob_vertices_in_world = OB[ob_convex_hull.vertices]
-    #
-    # for t in range(T):
-    #     # constraints += [(beta[0, t] - 1) >= gamma ** (t + 1) * (beta_0 - 1)]
-    #     constraints += [(beta[0, t] - 1) >= 0]
-    #     # w_Rot_b is ^wR_b
-    #     w_Rot_b = np.array([
-    #         [math.cos(xbar[2, t]), -math.sin(xbar[2, t])],
-    #         [math.sin(xbar[2, t]), math.cos(xbar[2, t])]
-    #     ])
-    #     # w_Tran_b is ^wT_b
-    #     w_Tran_b = np.array([
-    #         [xbar[0, t]],
-    #         [xbar[1, t]]
-    #     ])
-    #     for i in range(len(BODY_VERTICES_IN_BODY)):
-    #         constraints += [alpha[:, t] @ (
-    #                 (w_Rot_b @ BODY_VERTICES_IN_BODY[i]).T + w_Tran_b) - xbar[0:2, t] <= 1]
-    #     for i in range(len(ob_vertices_in_world)):
-    #         constraints += [alpha[:, t] @ (ob_vertices_in_world[i].T - xbar[0:2, t]) >= beta[0, t]]
+    ob_convex_hull = set_convex_hull(OB)
+    ob_vertices_in_world = OB[ob_convex_hull.vertices]
+
+    for t in range(T):
+        constraints += [(beta[0, t] - 1) >= gamma ** (t + 1) * (beta_0 - 1)]
+        # w_Rot_b is ^wR_b
+        w_rot_b = np.array([
+            [math.cos(xbar[2, t]), -math.sin(xbar[2, t])],
+            [math.sin(xbar[2, t]), math.cos(xbar[2, t])]
+        ])
+        # w_Tran_b is ^wT_b
+        w_tran_b = np.array([
+            [xbar[0, t]],
+            [xbar[1, t]]
+        ])
+        for i in range(len(BODY_VERTICES_IN_BODY)):
+            constraints += [alpha[:, t] @ (
+                    ((w_rot_b @ BODY_VERTICES_IN_BODY[i]).T + w_tran_b) - x[0:2, t]) <= 1]
+        for i in range(len(ob_vertices_in_world)):
+            constraints += [alpha[:, t] @ (ob_vertices_in_world[i].T - x[0:2, t]) >= beta[0, t]]
 
     prob = cvxpy.Problem(cvxpy.Minimize(cost), constraints)
     prob.solve(solver=cvxpy.ECOS, verbose=False)
